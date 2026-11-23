@@ -1,0 +1,27 @@
+if(NOT DEFINED ENV{VITASDK})
+  message(FATAL_ERROR "VITASDK is not set")
+endif()
+include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
+
+set(NEKPO_VITA_TITLE_ID "{{.VitaTitleID}}" CACHE STRING "Vita title ID")
+set(NEKPO_VITA_VERSION "{{.VitaVersion}}" CACHE STRING "Vita app version")
+{{if .PkgConfig}}
+target_include_directories({{.Target}} PRIVATE ${NEKPO_PKG_STATIC_INCLUDE_DIRS})
+target_link_libraries({{.Target}} PRIVATE ${NEKPO_PKG_STATIC_LDFLAGS})
+{{end}}
+target_link_libraries({{.Target}} PRIVATE SceCtrl_stub SceDisplay_stub SceSysmodule_stub)
+target_link_options({{.Target}} PRIVATE -Wl,-q)
+
+set(NEKPO_VITA_SCE_SYS ${CMAKE_SOURCE_DIR}/assets/vita/sce_sys)
+file(GLOB_RECURSE NEKPO_VITA_SCE_FILES RELATIVE ${NEKPO_VITA_SCE_SYS} CONFIGURE_DEPENDS
+  ${NEKPO_VITA_SCE_SYS}/*.png ${NEKPO_VITA_SCE_SYS}/*.xml)
+set(NEKPO_VITA_SCE_ARGS)
+foreach(f ${NEKPO_VITA_SCE_FILES})
+  list(APPEND NEKPO_VITA_SCE_ARGS FILE ${NEKPO_VITA_SCE_SYS}/${f} sce_sys/${f})
+endforeach()
+
+vita_create_self({{.Target}}.self {{.Target}})
+vita_create_vpk({{.Target}}.vpk ${NEKPO_VITA_TITLE_ID} {{.Target}}.self
+  VERSION ${NEKPO_VITA_VERSION}
+  NAME {{.Name}}
+  ${NEKPO_VITA_SCE_ARGS})

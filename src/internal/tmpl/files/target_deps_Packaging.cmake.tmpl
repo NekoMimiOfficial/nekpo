@@ -1,0 +1,103 @@
+set(NEKPO_DEPS_DIR "${CMAKE_SOURCE_DIR}/target_deps")
+include("${NEKPO_DEPS_DIR}/package_info.cmake")
+include("${NEKPO_DEPS_DIR}/GenChangelog.cmake")
+set(NEKPO_COPYRIGHT_SRC "${NEKPO_DEPS_DIR}/debian/copyright")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${NEKPO_DEPS_DIR}/package_info.cmake")
+
+if(NOT DEFINED NEKPO_VERSION)
+  set(NEKPO_VERSION "0.0.0")
+  if(EXISTS "${NEKPO_CHANGELOG_SRC}")
+    file(STRINGS "${NEKPO_CHANGELOG_SRC}" NEKPO_CHANGELOG_FIRST LIMIT_COUNT 1)
+    if(NEKPO_CHANGELOG_FIRST MATCHES "\\(([^)]+)\\)")
+      set(NEKPO_VERSION "${CMAKE_MATCH_1}")
+    endif()
+  endif()
+endif()
+
+set(NEKPO_DIST_DIR "${CMAKE_BINARY_DIR}/dist")
+set(NEKPO_BIN_ASSETS "${CMAKE_BINARY_DIR}/bin/data")
+set(NEKPO_PKG_NAME "{{.ID}}-${NEKPO_VERSION}-linux-${CMAKE_SYSTEM_PROCESSOR}")
+file(MAKE_DIRECTORY "${NEKPO_DIST_DIR}")
+{{if .Tarball}}
+add_custom_target(tarball
+  COMMAND ${CMAKE_COMMAND} -E remove_directory "${NEKPO_DIST_DIR}/${NEKPO_PKG_NAME}"
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${NEKPO_DIST_DIR}/${NEKPO_PKG_NAME}"
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:{{.Target}}> "${NEKPO_DIST_DIR}/${NEKPO_PKG_NAME}/"{{if .AssetsDir}}
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${NEKPO_BIN_ASSETS}" "${NEKPO_DIST_DIR}/${NEKPO_PKG_NAME}/data"{{end}}
+  COMMAND ${CMAKE_COMMAND} -E tar czf "${NEKPO_PKG_NAME}.tar.gz" "${NEKPO_PKG_NAME}"
+  WORKING_DIRECTORY "${NEKPO_DIST_DIR}"
+  VERBATIM)
+add_dependencies(tarball {{.Target}}{{if .AssetsDir}} {{.Target}}_assets{{end}})
+{{end}}{{if .Deb}}
+install(TARGETS {{.Target}} RUNTIME DESTINATION bin COMPONENT {{.ID}}){{if .AssetsDir}}
+install(DIRECTORY "${CMAKE_SOURCE_DIR}/{{.AssetsDir}}/" DESTINATION /opt/{{.ID}} COMPONENT {{.ID}}){{end}}
+install(FILES "${CMAKE_SOURCE_DIR}/{{.IconPath}}" RENAME {{.ID}}.png DESTINATION share/pixmaps COMPONENT {{.ID}})
+install(FILES "${NEKPO_DEPS_DIR}/{{.ID}}.desktop" DESTINATION share/applications COMPONENT {{.ID}})
+
+if(EXISTS "${NEKPO_CHANGELOG_SRC}")
+  set(NEKPO_CHANGELOG_GZ "${CMAKE_BINARY_DIR}/changelog.Debian.gz")
+  execute_process(COMMAND gzip -9n -c "${NEKPO_CHANGELOG_SRC}" OUTPUT_FILE "${NEKPO_CHANGELOG_GZ}")
+  install(FILES "${NEKPO_CHANGELOG_GZ}" DESTINATION share/doc/{{.ID}} COMPONENT {{.ID}})
+endif()
+
+if(EXISTS "${NEKPO_COPYRIGHT_SRC}")
+  install(FILES "${NEKPO_COPYRIGHT_SRC}" DESTINATION share/doc/{{.ID}} COMPONENT {{.ID}})
+endif()
+
+set(NEKPO_DEB_SCRIPTS "")
+foreach(script preinst postinst prerm postrm)
+  if(EXISTS "${NEKPO_DEPS_DIR}/debian/${script}")
+    list(APPEND NEKPO_DEB_SCRIPTS "${NEKPO_DEPS_DIR}/debian/${script}")
+  endif()
+endforeach()
+
+set(CPACK_GENERATOR DEB)
+set(CPACK_PACKAGE_NAME {{.ID}})
+set(CPACK_PACKAGE_VERSION "${NEKPO_VERSION}")
+set(CPACK_PACKAGE_CONTACT "${NEKPO_MAINTAINER}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${NEKPO_SUMMARY}")
+set(CPACK_PACKAGE_DESCRIPTION "${NEKPO_DESCRIPTION}")
+set(CPACK_PACKAGE_DIRECTORY "${NEKPO_DIST_DIR}")
+set(CPACK_PACKAGING_INSTALL_PREFIX /usr)
+set(CPACK_SET_DESTDIR ON)
+set(CPACK_DEB_COMPONENT_INSTALL ON)
+set(CPACK_COMPONENTS_ALL {{.ID}})
+set(CPACK_COMPONENTS_GROUPING ALL_COMPONENTS_IN_ONE)
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SECTION "${NEKPO_DEB_SECTION}")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "${NEKPO_DEB_PRIORITY}")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ${NEKPO_DEB_AUTO_DEPENDS})
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "${NEKPO_DEB_DEPENDS}")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "${NEKPO_DEB_RECOMMENDS}")
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "${NEKPO_DEB_SUGGESTS}")
+if(NEKPO_HOMEPAGE)
+  set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${NEKPO_HOMEPAGE}")
+endif()
+if(NEKPO_DEB_SCRIPTS)
+  set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${NEKPO_DEB_SCRIPTS}")
+endif()
+include(CPack)
+
+add_custom_target(deb
+  COMMAND ${CMAKE_CPACK_COMMAND} -G DEB --config "${CMAKE_BINARY_DIR}/CPackConfig.cmake"
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  VERBATIM)
+add_dependencies(deb {{.Target}}{{if .AssetsDir}} {{.Target}}_assets{{end}})
+{{end}}{{if .AppImage}}
+set(NEKPO_LINUXDEPLOY "" CACHE FILEPATH "Path to a linuxdeploy AppImage; empty means download one")
+set(NEKPO_APPIMAGE_ASSET_SUBDIR "usr/share/{{.ID}}" CACHE STRING "Directory inside the AppDir for runtime data")
+
+add_custom_target(appimage
+  COMMAND ${CMAKE_COMMAND} -E env "LINUXDEPLOY=${NEKPO_LINUXDEPLOY}" sh "${NEKPO_DEPS_DIR}/build_appimage.sh"
+          $<TARGET_FILE:{{.Target}}>
+          "${NEKPO_BIN_ASSETS}"
+          "${NEKPO_DEPS_DIR}/{{.ID}}.desktop"
+          "${CMAKE_SOURCE_DIR}/{{.IconPath}}"
+          "${NEKPO_DIST_DIR}"
+          "${NEKPO_APPIMAGE_ASSET_SUBDIR}"
+          "${NEKPO_VERSION}"
+  VERBATIM)
+add_dependencies(appimage {{.Target}}{{if .AssetsDir}} {{.Target}}_assets{{end}})
+{{end}}
+add_custom_target(dist)
+add_dependencies(dist{{range .DesktopTargetList}} {{.}}{{end}})

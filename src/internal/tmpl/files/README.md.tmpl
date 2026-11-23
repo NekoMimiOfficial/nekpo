@@ -1,0 +1,14 @@
+# {{.Name}}
+{{if .Tagline}}
+{{.Tagline}}
+{{end}}{{if .Summary}}
+{{.Summary}}
+{{end}}{{if .GhSpec}}
+## Install
+
+    nekpo install {{.GhSpec}}
+{{end}}{{if .License}}
+## License
+
+{{.License}}
+{{end}}

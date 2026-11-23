@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="${NEKPO_ARTIFACTS:-$root/nekpo/nekpo_artifacts}"
+mkdir -p "$out"
+{{if .HasVita}}
+: "${VITASDK:?VITASDK is not set}"
+build_vita="$root/build-vita"
+cmake -S "$root" -B "$build_vita" -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+cmake --build "$build_vita" -j"$(nproc)"
+cp "$build_vita"/*.vpk "$out/"
+{{end}}{{if .HasDesktop}}
+build_desktop="$root/build-desktop"
+cmake -S "$root" -B "$build_desktop" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$build_desktop" -j"$(nproc)"
+{{if .DesktopTargetList}}cmake --build "$build_desktop" --target{{range .DesktopTargetList}} {{.}}{{end}} -j"$(nproc)"
+{{end}}{{range .DesktopCopies}}cp "$build_desktop"/dist/{{.}} "$out/"
+{{end}}{{end}}

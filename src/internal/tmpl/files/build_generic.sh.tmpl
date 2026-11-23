@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="${NEKPO_ARTIFACTS:-$root/nekpo/nekpo_artifacts}"
+mkdir -p "$out"
+cd "$root"
+{{if .BuildCmd}}
+{{.BuildCmd}}
+{{else}}
+echo "nekpo/build.sh: add the commands that write your artifacts into $out" >&2
+exit 1
+{{end}}

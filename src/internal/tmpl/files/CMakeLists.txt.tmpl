@@ -1,0 +1,46 @@
+cmake_minimum_required(VERSION 3.16)
+project({{.CMakeProject}} LANGUAGES {{.CMakeLangs}})
+
+{{if .IsC}}set(CMAKE_C_STANDARD {{.Std}})
+set(CMAKE_C_STANDARD_REQUIRED ON)
+{{else}}set(CMAKE_CXX_STANDARD {{.Std}})
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+{{end}}if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if(NOT NEKPO_PLATFORM)
+{{if .HasVita}}  if(VITA)
+    set(NEKPO_PLATFORM Vita)
+  else()
+    set(NEKPO_PLATFORM Desktop)
+  endif()
+{{else}}  set(NEKPO_PLATFORM Desktop)
+{{end}}endif()
+set(NEKPO_PLATFORM "${NEKPO_PLATFORM}" CACHE STRING "Platform layer: the name of a file in cmake/platform")
+
+set(NEKPO_PLATFORM_CMAKE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platform/${NEKPO_PLATFORM}.cmake")
+if(NOT EXISTS "${NEKPO_PLATFORM_CMAKE}")
+  message(FATAL_ERROR "Unknown NEKPO_PLATFORM '${NEKPO_PLATFORM}': expected ${NEKPO_PLATFORM_CMAKE}")
+endif()
+message(STATUS "{{.Name}} platform: ${NEKPO_PLATFORM}")
+
+set(NEKPO_PLATFORM_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/${NEKPO_PLATFORM}.{{.SrcExt}}")
+if(NOT EXISTS "${NEKPO_PLATFORM_SOURCE}")
+  set(NEKPO_PLATFORM_SOURCE "")
+endif()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Dependencies.cmake")
+
+file(GLOB NEKPO_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.{{.SrcExt}}")
+add_executable({{.Target}} ${NEKPO_SOURCES} ${NEKPO_PLATFORM_SOURCE})
+target_include_directories({{.Target}} PRIVATE src ${NEKPO_DEP_INCLUDES})
+target_link_libraries({{.Target}} PRIVATE ${NEKPO_DEP_LIBS}{{range .DepTargets}} {{.}}{{end}}{{range .LinkLibs}} {{.}}{{end}})
+target_compile_options({{.Target}} PRIVATE -Wall -Wextra)
+{{if .PkgConfig}}
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(NEKPO_PKG REQUIRED{{range .PkgConfig}} {{.}}{{end}})
+target_include_directories({{.Target}} PRIVATE ${NEKPO_PKG_INCLUDE_DIRS})
+target_link_libraries({{.Target}} PRIVATE ${NEKPO_PKG_LIBRARIES})
+{{end}}
+include("${NEKPO_PLATFORM_CMAKE}")
